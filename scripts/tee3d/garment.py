@@ -48,7 +48,9 @@ class ClothParams:
     gravity_full: int = 40        # ...then ramps to full gravity at this frame
     collision_distance: float = 0.004
     self_distance: float = 0.0025
-    pressure: float = 0.0
+    pressure: float = 6.0         # uniform inside pressure: fills the sleeves like a ghost
+                                  # mannequin (x kPa pressure scale: ~30 % of gravity here)
+    pressure_body: float = 0.3    # relative pressure on front/back (rib: none)
 
 
 # --- 3D starting positions -----------------------------------------------------------------
@@ -67,17 +69,42 @@ def _seam(pat: Pattern, name: str):
     return next(s for s in pat.seams if s.name == name)
 
 
+def _hem_ring(pat: Pattern, rig: Rig, sx: float, shoulder_pt, underarm_pt):
+    """Ring around the arm where each sleeve starts its hem. It slides along the arm and
+    tilts so that the straight lines shoulder point -> ring top and underarm -> ring bottom
+    have the pattern lengths of the sleeve fold and of the underarm seam: no fabric starts
+    compressed under the arm (that is what crumpled into flaps at the sleeve hem)."""
+    joint, d, up = rig.arm_frame(sx)
+    r = pat.spec.sleeve_opening / (2 * math.pi)
+    l_top, l_under = pat.spec.sleeve_length, pat.underarm_len
+    best = None
+    for t in np.arange(12.0, rig.arm_length, 0.25):
+        r_arm = rig.arm_r0 + (rig.arm_r1 - rig.arm_r0) * t / rig.arm_length
+        for beta in np.radians(np.arange(-45.0, 25.0, 1.0)):
+            if r * math.cos(beta) < r_arm + 1.0:  # the tilted ring must clear the arm
+                continue
+            e1 = math.cos(beta) * up + math.sin(beta) * d
+            c = joint + t * d
+            err = ((np.linalg.norm(shoulder_pt - (c + r * e1)) - l_top) ** 2
+                   + (np.linalg.norm(underarm_pt - (c - r * e1)) - l_under) ** 2)
+            if best is None or err < best[0]:
+                best = (err, t, math.degrees(beta), c, e1)
+    err, t, beta, c, e1 = best
+    log(f"sleeve hem ring: {t:.1f} cm down the arm, tilted {beta:+.0f} deg, "
+        f"length error {math.sqrt(err):.1f} cm")
+    return c, e1, r
+
+
 def starting_positions(pat: Pattern, rig: Rig) -> dict[str, np.ndarray]:
     P = pat.pieces
     pos = {"front": _place_body(P["front"].grid, rig, back=False),
            "back": _place_body(P["back"].grid, rig, back=True)}
     flat = {k: v.reshape(-1, 3) for k, v in pos.items()}
 
-    # sleeves: loft each half from its armhole to half a ring around the arm
+    # sleeves: loft each half from its armhole to half of the hem ring
     for side, sx in (("l", 1.0), ("r", -1.0)):
-        joint, d, up = rig.arm_frame(sx)
-        centre = joint + d * rig.sleeve_hem_dist
-        r_hem = pat.spec.sleeve_opening / (2 * math.pi)
+        armhole = flat["front"][_seam(pat, f"armhole_sleeve_{side}_front").ia]  # underarm -> shoulder
+        centre, e1, r_hem = _hem_ring(pat, rig, sx, armhole[-1], armhole[0])
         for role in ("front", "back"):
             pc = P[f"sleeve_{side}_{role}"]
             sm = _seam(pat, f"armhole_sleeve_{side}_{role}")
@@ -86,11 +113,11 @@ def starting_positions(pat: Pattern, rig: Rig) -> dict[str, np.ndarray]:
             for ia, ib in zip(sm.ia, sm.ib):
                 cap[ib - pc.idx(pc.nv, 0)] = body[ia]
             i = np.arange(pc.nu + 1) / pc.nu
-            eps = 0.05  # keep the halves' edges ~3 mm apart at the start
+            eps = 0.05  # keep the halves' edges ~4 mm apart at the start
             t = (1.0 - i) if pc.marks["half"] == "a" else i
             phi = eps + (np.pi - 2 * eps) * t
             e_side = np.array([0.0, -1.0 if role == "front" else 1.0, 0.0])
-            hem = centre + r_hem * (np.cos(phi)[:, None] * up + np.sin(phi)[:, None] * e_side)
+            hem = centre + r_hem * (np.cos(phi)[:, None] * e1 + np.sin(phi)[:, None] * e_side)
             # keep the cap 0.5 cm off the armhole so the two rows do not start coincident
             gap = hem - cap
             cap = cap + 0.5 * gap / np.linalg.norm(gap, axis=1, keepdims=True)
@@ -191,7 +218,7 @@ def _neck_distance(pts: np.ndarray, neck: np.ndarray):
 
 # --- simulation mesh -----------------------------------------------------------------------
 def build_sim_object(pat: Pattern, names, start: dict, col, prints_json: Path | None,
-                     name: str = "Tee_sim", weld_virtual: bool = False):
+                     name: str = "Tee_sim", weld_virtual: bool = False, body_pressure: float = 0.3):
     """One cloth object for the given pieces. Seams become loose (sewing) edges. With
     weld_virtual, halves of the same pattern piece are merged along their fold line: both
     sides share the same flat rest coordinates there, so the fabric is continuous (it has
@@ -202,6 +229,7 @@ def build_sim_object(pat: Pattern, names, start: dict, col, prints_json: Path | 
 
     verts, rest, faces, face_piece = [], [], [], []
     uv_pat, uv_front, uv_back, uv_hem, uv_neck, thick, stiff = [], [], [], [], [], [], []
+    press = []
     offset = {}
     n = 0
     for piece in names:
@@ -242,6 +270,8 @@ def build_sim_object(pat: Pattern, names, start: dict, col, prints_json: Path | 
         in_hem = hem_d < spec.hem_depth
         thick.append(np.where(is_rib, 1.0, np.where(in_hem, 0.75, 0.375)))
         stiff.append(np.full(len(g), 1.0 if is_rib else 0.0))
+        on_body = pc.pattern in ("front", "back")
+        press.append(np.full(len(g), 0.0 if is_rib else (body_pressure if on_body else 1.0)))
         n += len(g)
 
     verts = np.concatenate(verts)
@@ -286,11 +316,12 @@ def build_sim_object(pat: Pattern, names, start: dict, col, prints_json: Path | 
     point_attr(me, "thickness", per_vertex(thick))
     me.polygons.foreach_set("material_index", (np.concatenate(face_piece) == PATTERN_IDS["rib"]).astype(np.int32))
 
-    vg = obj.vertex_groups.new(name="stiff")
-    w = per_vertex(stiff)
-    for value in np.unique(w):
-        if value > 0:
-            vg.add(np.nonzero(w == value)[0].tolist(), float(value), "REPLACE")
+    for group, data in (("stiff", stiff), ("pressure", press)):
+        vg = obj.vertex_groups.new(name=group)
+        w = per_vertex(data)
+        for value in np.unique(w):
+            if value > 0:
+                vg.add(np.nonzero(w == value)[0].tolist(), float(value), "REPLACE")
 
     obj.shape_key_add(name="Basis", from_mix=False)
     flat = obj.shape_key_add(name="Flat", from_mix=False)
@@ -324,6 +355,8 @@ def setup_cloth(obj, p: ClothParams) -> bpy.types.ClothModifier:
     if p.pressure:
         s.use_pressure = True
         s.uniform_pressure_force = p.pressure
+        s.pressure_factor = 1.0
+        s.vertex_group_pressure = "pressure"
     c = mod.collision_settings
     c.use_collision = True
     c.distance_min = p.collision_distance

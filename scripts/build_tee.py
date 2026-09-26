@@ -94,7 +94,8 @@ def main():
     # pass 1: sew front, back and sleeves on the mannequin and let them drape
     body_names = [n for n in garment.ORDER if not n.startswith("rib")]
     start = garment.starting_positions(pat, rig)
-    sim1, _ = garment.build_sim_object(pat, body_names, start, sim_col, prints_json, "Tee_sim_pass1")
+    sim1, _ = garment.build_sim_object(pat, body_names, start, sim_col, prints_json, "Tee_sim_pass1",
+                                       body_pressure=params.pressure_body)
     garment.setup_cloth(sim1, params)
     if args.debug_renders:
         debug_render([sim1, body], "start")
@@ -107,7 +108,7 @@ def main():
     pos.update(garment.sweep_rib(pat, rig, pos))
     bpy.data.objects.remove(sim1)
     sim, info = garment.build_sim_object(pat, garment.ORDER, pos, sim_col, prints_json,
-                                         weld_virtual=True)
+                                         weld_virtual=True, body_pressure=params.pressure_body)
     settle = dataclasses.replace(params, frames=params.settle_frames, sew_frames=0)
     garment.setup_cloth(sim, settle)
     garment.simulate(sim, settle)
@@ -139,7 +140,11 @@ def main():
     scene.camera = cams["front"]
     studio_scene.calibrate_exposure(cams["front"], studio)
 
-    # keep the simulation set-up in the file, but out of the way (and not re-evaluated)
+    # keep the simulation set-up in the file (re-simulable), but with an empty cache, out of
+    # the way and not re-evaluated on load
+    sim.modifiers.remove(sim.modifiers["Cloth"])
+    garment.setup_cloth(sim, settle)
+    scene.frame_current = 1
     sim.hide_render = True
     vl = bpy.context.view_layer
     vl.layer_collection.children[sim_col.name].exclude = True
@@ -155,10 +160,13 @@ def main():
         return
     out = Path(args.renders)
     out.mkdir(parents=True, exist_ok=True)
-    res = (1000, 1000) if args.quality == "preview" else (2000, 2000)
+    sizes = {"front": 2000, "back": 2000, "three_quarter": 1600, "detail": 1600}
+    scale = 0.5 if args.quality == "preview" else 1.0
     done = {}
     for v in [v.strip() for v in args.views.split(",") if v.strip()]:
-        done[v] = studio_scene.render_view(cams[v], studio, views[v][0], out / f"tee_{v}.png", res)
+        px = int(sizes[v] * scale)
+        done[v] = studio_scene.render_view(cams[v], studio, views[v][0], out / f"tee_{v}.png",
+                                           (px, px))
         if v != "detail":
             studio_scene.on_background(done[v], out / f"tee_{v}_white.png")
     if "front" in done and "back" in done:

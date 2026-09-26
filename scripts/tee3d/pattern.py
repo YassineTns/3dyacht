@@ -30,8 +30,8 @@ class TeeSpec:
     back_neck_drop: float = 2.5
     armhole_depth: float = 26.0      # shoulder point -> underarm, straight down
     sleeve_length: float = 23.0      # cap top -> sleeve hem: ends above the elbow
-    sleeve_cap_height: float = 6.0   # low cap, typical of dropped shoulders
-    sleeve_opening: float = 44.0     # circumference of the sleeve hem (22 cm flat)
+    sleeve_cap_height: float = 12.0  # cap height sets the hang angle: 12 cm -> ~45-50 deg
+    sleeve_opening: float = 48.0     # circumference of the sleeve hem (24 cm flat): wide
     rib_height: float = 3.0          # visible height of the (folded) neck rib
     rib_ratio: float = 0.90          # rib length / neckline length: the rib is stretched on
     hem_depth: float = 2.5           # turned-up hem allowance, body and sleeves
@@ -244,6 +244,7 @@ class Pattern:
         hem_half = s.sleeve_opening / 2.0
         Ls = s.sleeve_length
         underarm = segment([-hem_half, -Ls], [-b, -h])
+        self.underarm_len = length(underarm)
         centre = segment([0.0, -Ls], [0.0, 0.0])
         self.n_sleeve = segments(0.5 * (length(underarm) + length(centre)), e)
         cap = resample_at(cap_half(b), self.armhole_fracs)
@@ -282,8 +283,8 @@ class Pattern:
     def _seams(self):
         P, add = self.pieces, self.seams.append
         f, b = P["front"], P["back"]
-        ns, na, nsh = self.n_side, self.n_arm, self.n_sh
-        nv = f.nv  # = ns + na, same for front and back
+        ns, nsh = self.n_side, self.n_sh
+        nv = f.nv  # = n_side + n_arm, same for front and back
         # side seams: front right (world +X) <-> back left, front left <-> back right
         add(Seam("front", f.right(0, ns), "back", b.left(0, ns), name="side_l"))
         add(Seam("front", f.left(0, ns), "back", b.right(0, ns), name="side_r"))

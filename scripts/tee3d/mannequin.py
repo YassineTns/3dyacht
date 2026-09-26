@@ -19,7 +19,7 @@ from .util import CM, apply_modifiers, log, mesh_object, set_smooth
 class Rig:
     """Mannequin pose and the initial placement of the panels around it (cm, degrees)."""
     hps_z: float = 145.0          # world height of the high point of shoulder line
-    arm_angle: float = 45.0       # arms down-out, from vertical (mockup: ~45 deg)
+    arm_angle: float = 50.0       # arms down-out, from vertical (mockup sleeves: ~45-50 deg)
     joint_x: float = 17.5         # shoulder joint, from the centre plane
     joint_drop: float = 10.5      # shoulder joint below the HPS line
     arm_length: float = 40.0
@@ -27,7 +27,6 @@ class Rig:
     arm_r1: float = 4.5           # ... near the elbow
     panel_depth: float = 15.0     # flat front/back panels start this far in front/behind
     wrap_radius: float = 60.0     # ... slightly curved around the body with this radius
-    sleeve_hem_dist: float = 30.0  # arm joint -> sleeve hem ring, along the arm
 
     def arm_frame(self, sx: float):
         """Joint, arm direction and 'up' direction (perpendicular, towards the shoulder top)
@@ -143,7 +142,7 @@ def build(rig: Rig, col: bpy.types.Collection, voxel_cm: float = 0.7) -> bpy.typ
     set_smooth(obj.data)
     log(f"mannequin: {len(obj.data.vertices)} verts")
 
-    coll = obj.modifiers.new("Collision", "COLLISION")
+    obj.modifiers.new("Collision", "COLLISION")
     cs = obj.collision
     cs.thickness_outer = 0.004
     cs.thickness_inner = 0.02

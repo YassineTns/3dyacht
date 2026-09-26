@@ -135,10 +135,10 @@ def detail_camera(name: str, studio: dict, hps_z_m: float) -> bpy.types.Object:
         sc.collection.objects.link(cam)
     cam.data.lens = 70.0
     cam.data.sensor_width = 36.0
-    target = Vector((0.06, studio["lo"].y + 0.05, hps_z_m - 0.16))
+    target = Vector((0.06, studio["lo"].y + 0.05, hps_z_m - 0.13))
     az, el = math.radians(16.0), math.radians(9.0)
     d = Vector((math.sin(az) * math.cos(el), -math.cos(az) * math.cos(el), math.sin(el)))
-    cam.location = target + d * 0.66
+    cam.location = target + d * 0.74
     _look_at(cam, target)
     return cam
 
