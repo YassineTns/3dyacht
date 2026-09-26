@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+*.blend1
+# scratch output of the build script (cache, debug frames)
+output/cache/
+renders/_*
