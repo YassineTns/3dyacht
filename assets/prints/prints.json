@@ -1,0 +1,34 @@
+{
+  "source": "Tee_1.png",
+  "front": {
+    "file": "print_front.png",
+    "size_px": [
+      495,
+      1656
+    ],
+    "upscale": 2,
+    "panel": "front",
+    "left_of_center": 0.08413461538461539,
+    "right_of_center": 0.32211538461538464,
+    "top_below_hps": 0.24326923076923077,
+    "bottom_below_hps": 1.039423076923077,
+    "hem_below_hps": 1.0,
+    "note": "x > 0 is the wearer's left (viewer's right); units = garment length HPS->hem"
+  },
+  "back": {
+    "file": "print_back.png",
+    "size_px": [
+      1644,
+      550
+    ],
+    "upscale": 4,
+    "panel": "back",
+    "left_of_center": -0.20812807881773399,
+    "right_of_center": 0.19679802955665024,
+    "top_below_hps": 0.11995073891625616,
+    "bottom_below_hps": 0.2554187192118227,
+    "hem_below_hps": 1.0,
+    "ink": "#360306",
+    "note": "seen from behind; units = garment length HPS->hem"
+  }
+}

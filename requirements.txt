@@ -1,0 +1,4 @@
+# Step 1 (scripts/extract_prints.py) - plain Python 3.10+, outside Blender
+numpy>=1.24
+opencv-python-headless>=4.8
+Pillow>=10.0
